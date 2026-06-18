@@ -77,6 +77,10 @@
   .acap{ position:absolute; top:calc(66% - 5px); width:2px; height:11px; background:#c0392b; }
   .blabel{ position:absolute; top:-1px; left:1px; white-space:nowrap; font-size:9px; color:#111; z-index:3; }
   .blabel.a{ top:auto; bottom:-1px; color:#c0392b; }
+  /* 行事・検査の行 */
+  tr.eventrow td.name{ background:#f3f6fa; font-weight:bold; }
+  .evmark{ font-size:8px; color:#1f3a5f; }
+  .evlabel{ position:absolute; left:1px; top:2px; white-space:nowrap; font-size:9px; color:#1f3a5f; z-index:3; }
 
   .legend{ display:flex; gap:22px; align-items:center; margin-top:8px; font-size:12px; flex-wrap:wrap; }
   .legend .ln{ display:inline-block; width:34px; vertical-align:middle; margin-right:6px; }
@@ -178,10 +182,10 @@
         <button class="mini" id="btn_custom_add">＋ 行を追加</button>
       </div>
       <table class="editlist" id="rows_table">
-        <thead><tr><th style="width:60px">種別</th><th>名称</th><th style="width:120px">並べ替え／削除</th></tr></thead>
+        <thead><tr><th style="width:60px">種別</th><th>名称</th><th style="width:90px">出来高%</th><th style="width:120px">並べ替え／削除</th></tr></thead>
         <tbody></tbody>
       </table>
-      <p class="hint">◎ヘッダは「空調設備工事」などの大分類見出し。作業はその下にぶら下がる細目です。各行の <b>↑↓で並べ替え</b>、<b>✎で名称変更</b>ができます（削除しなくてOK）。</p>
+      <p class="hint">◎ヘッダは「空調設備工事」などの大分類見出し。作業はその下にぶら下がる細目です。各行の <b>↑↓で並べ替え</b>、<b>✎で名称変更</b>ができます（削除しなくてOK）。<br><b>出来高%</b>は「出来高ベース進捗」を使うとき各作業の重み（合計100が目安）。空欄なら無視されます。</p>
     </div>
   </div>
 
@@ -216,7 +220,13 @@
     <h2>⑤ 進捗率・備考・印刷</h2>
     <div class="body">
       <div class="grid">
-        <div class="fld"><label>予定進捗率（日数ベース自動）</label><input type="text" id="prog_plan" readonly style="background:#eef"></div>
+        <div class="fld"><label>進捗の計算方法</label>
+          <div style="display:flex;gap:14px;align-items:center;font-size:13px;padding-top:4px">
+            <label><input type="radio" name="progmode" value="days" checked> 日数ベース</label>
+            <label><input type="radio" name="progmode" value="weight"> 出来高ベース</label>
+          </div>
+        </div>
+        <div class="fld"><label>予定進捗率（自動）</label><input type="text" id="prog_plan" readonly style="background:#eef"></div>
         <div class="fld"><label>実施進捗率（手入力 %）</label><input type="text" id="prog_actual" placeholder="例）28.5"></div>
       </div>
       <div class="fld" style="margin-top:8px">
@@ -255,6 +265,25 @@
     </div>
   </div>
 
+  <!-- ⑦ 行事・検査 -->
+  <div class="panel no-print">
+    <h2>⑦ 行事・検査（日付ごと・任意）</h2>
+    <div class="body">
+      <div class="grid">
+        <div class="fld"><label>日付</label><input type="date" id="ev_date"></div>
+        <div class="fld"><label>区分（表の下に出る行の名前）</label><input type="text" id="ev_lane" list="lane_templates" placeholder="例）会議 / 検査 / 搬入"></div>
+        <div class="fld"><label>内容</label><input type="text" id="ev_text" placeholder="例）定例会議 10:00"></div>
+        <div class="fld" style="justify-content:flex-end"><button class="primary" id="btn_ev_add">＋ 行事を追加</button></div>
+      </div>
+      <datalist id="lane_templates"><option value="主要行事"><option value="会議"><option value="検査・立会"><option value="搬入"><option value="断水"></datalist>
+      <table class="editlist" id="ev_table" style="margin-top:10px">
+        <thead><tr><th style="width:120px">日付</th><th style="width:120px">区分</th><th>内容</th><th style="width:60px">削除</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="hint">入れた行事は、工程表の下に「区分」ごとの行として、その日付の位置に表示されます（定例会議・検査・搬入など）。</p>
+    </div>
+  </div>
+
   <!-- 工程表プレビュー（印刷対象） -->
   <div id="sheet">
     <div class="sheet-title">工　事　工　程　表</div>
@@ -279,7 +308,7 @@
 
 <script>
 /* ====================== 状態 ====================== */
-let RID=0, BID=0;
+let RID=0, BID=0, EVID=0;
 const MASTER=[
   {kind:'header',name:'空調設備工事'},
   {kind:'task',name:'空調配管工事'},
@@ -293,7 +322,7 @@ const MASTER=[
   {kind:'task',name:'停電切替工事'},
   {kind:'task',name:'試験調整'},
 ];
-const state={ rows:[], bars:[] };
+const state={ rows:[], bars:[], events:[] };
 
 /* ====================== 日付ヘルパ ====================== */
 const WD=['日','月','火','水','木','金','土'];
@@ -332,6 +361,7 @@ function renderRows(){
     const tr=document.createElement('tr');
     tr.innerHTML=`<td>${r.kind==='header'?'◎ヘッダ':'作業'}</td>
       <td>${r.name}</td>
+      <td>${r.kind==='task'?`<input type="number" min="0" step="0.1" value="${r.weight!=null?r.weight:''}" data-weight="${r.id}" style="width:72px" placeholder="—">`:''}</td>
       <td class="row-actions">
         <button class="mini" data-up="${r.id}">↑</button>
         <button class="mini" data-down="${r.id}">↓</button>
@@ -357,6 +387,17 @@ function renderBars(){
       <td><span class="pill ${b.type}">${b.type==='plan'?'予定':'実施'}</span></td>
       <td>${b.start}</td><td>${b.end}</td>
       <td><button class="mini danger" data-delbar="${b.id}">削除</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+
+/* ====================== 行事・検査 ====================== */
+function renderEvents(){
+  const tb=document.querySelector('#ev_table tbody'); tb.innerHTML='';
+  state.events.slice().sort((a,b)=>a.date<b.date?-1:1).forEach(ev=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${ev.date}</td><td>${ev.lane}</td><td>${(ev.text||'').replace(/</g,'&lt;')}</td>
+      <td><button class="mini danger" data-delev="${ev.id}">削除</button></td>`;
     tb.appendChild(tr);
   });
 }
@@ -454,26 +495,48 @@ function renderSheet(){
     }).join('');
     html+='</tr>';
   });
+  // 行事・検査（区分ごとに1行、日付の位置に表示）
+  const lanes=[]; state.events.forEach(ev=>{ if(!lanes.includes(ev.lane)) lanes.push(ev.lane); });
+  lanes.forEach(lane=>{
+    html+=`<tr class="eventrow"><td class="name">${lane}</td>`;
+    html+=days.map(d=>{ const k=fmtD(d); const evs=state.events.filter(ev=>ev.lane===lane && ev.date===k);
+      let inner=''; if(evs.length){ inner='<span class="evmark">●</span><span class="evlabel">'+evs.map(e=>(e.text||'').replace(/</g,'&lt;')).join('／')+'</span>'; }
+      return `<td class="day ${dayClass(d)}">${inner}</td>`; }).join('');
+    html+='</tr>';
+  });
   html+='</tbody></table>';
   gw.innerHTML=html;
   renderProg(); renderRemarks();
 }
 
 /* ====================== 進捗率 ====================== */
+/* ある工種(行)の予定バーが、基準日までに何割進む予定か（日数で按分） */
+function planRatioRow(rowId, base){
+  const bars=state.bars.filter(b=>b.rowId===rowId && b.type==='plan');
+  let total=0, done=0;
+  bars.forEach(b=>{ const len=diffDays(b.start,b.end)+1; total+=len;
+    if(base>=b.end) done+=len; else if(base>=b.start) done+=diffDays(b.start,base)+1; });
+  return total>0 ? Math.min(1,Math.max(0,done/total)) : 0;
+}
 function renderProg(){
   const ts=val('p_ts'), te=val('p_te');
+  const mode=(document.querySelector('input[name=progmode]:checked')||{}).value||'days';
+  const base=val('d_base')||val('p_created')||fmtD(new Date());
   let planRate='';
-  if(ts&&te){
+  if(mode==='weight'){
+    const tasks=state.rows.filter(r=>r.kind==='task' && r.weight>0);
+    const sumW=tasks.reduce((s,r)=>s+r.weight,0);
+    if(sumW>0){ const acc=tasks.reduce((s,r)=>s+r.weight*planRatioRow(r.id,base),0); planRate=Math.round(acc/sumW*1000)/10; }
+  } else if(ts&&te){
     const total=diffDays(ts,te)+1;
-    let base=val('d_base')||val('p_created')||fmtD(new Date());
-    let elapsed=diffDays(ts,base)+1;
-    elapsed=Math.max(0,Math.min(elapsed,total));
+    let elapsed=diffDays(ts,base)+1; elapsed=Math.max(0,Math.min(elapsed,total));
     planRate= total>0 ? Math.round(elapsed/total*1000)/10 : 0;
   }
+  const tag = mode==='weight' ? '（出来高）' : '（日数）';
   document.getElementById('prog_plan').value = planRate===''?'':planRate+' %';
   const actual=val('prog_actual');
   const op=document.getElementById('o_prog');
-  op.innerHTML=`<tr><td class="k">予定進捗率</td><td>${planRate===''?'―':planRate+' ％'}</td>
+  op.innerHTML=`<tr><td class="k">予定進捗率${tag}</td><td>${planRate===''?'―':planRate+' ％'}</td>
     <td class="k">実施進捗率</td><td>${actual?actual+' ％':'―'}</td></tr>`;
 }
 
@@ -509,6 +572,9 @@ document.getElementById('rows_table').onclick=e=>{
   }
   refresh();
 };
+document.getElementById('rows_table').addEventListener('input',e=>{
+  const t=e.target; if(t.dataset && t.dataset.weight){ const r=state.rows.find(x=>x.id==t.dataset.weight); if(r){ r.weight = t.value===''?null:parseFloat(t.value); renderSheet(); saveLocal(); } }
+});
 document.getElementById('btn_bar_add').onclick=()=>{
   const rowId=+document.getElementById('b_row').value;
   if(!rowId){ alert('先に③で工種（作業の行）を追加してください'); return; }
@@ -521,6 +587,17 @@ document.getElementById('btn_bar_add').onclick=()=>{
 document.getElementById('bars_table').onclick=e=>{
   const b=e.target.closest('button'); if(!b) return;
   if(b.dataset.delbar){ state.bars=state.bars.filter(x=>x.id!=b.dataset.delbar); refresh(); }
+};
+document.getElementById('btn_ev_add').onclick=()=>{
+  const d=val('ev_date'), t=val('ev_text');
+  if(!d){ alert('日付を入れてください'); return; }
+  if(!t){ alert('内容を入れてください'); return; }
+  state.events.push({id:++EVID,date:d,lane:val('ev_lane')||'主要行事',text:t});
+  document.getElementById('ev_text').value=''; refresh();
+};
+document.getElementById('ev_table').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  if(b.dataset.delev){ state.events=state.events.filter(x=>x.id!=b.dataset.delev); refresh(); }
 };
 document.getElementById('btn_term').onclick=()=>{
   if(val('p_ts')) document.getElementById('d_start').value=val('p_ts');
@@ -543,6 +620,7 @@ document.getElementById('btn_thismonth').onclick=()=>{
   refresh();
 };
 document.querySelectorAll('input[name=paper]').forEach(r=>r.onchange=()=>{ setPaper(); renderSheet(); });
+document.querySelectorAll('input[name=progmode]').forEach(r=>r.onchange=()=>{ renderSheet(); saveLocal(); });
 function setPaper(){
   const size=document.querySelector('input[name=paper]:checked').value;
   let st=document.getElementById('pagestyle');
@@ -552,9 +630,10 @@ function setPaper(){
 document.getElementById('btn_print').onclick=()=>{ setPaper(); window.print(); };
 document.getElementById('btn_clear').onclick=()=>{
   if(!confirm('入力を全部消します。よろしいですか？')) return;
-  state.rows=[]; state.bars=[];
-  ['p_name','p_number','p_owner','p_sv','p_agent','p_eng','p_ts','p_te','p_created','d_start','d_end','d_base','d_holidays','prog_actual','b_label','p_remarks'].forEach(id=>document.getElementById(id).value='');
+  state.rows=[]; state.bars=[]; state.events=[];
+  ['p_name','p_number','p_owner','p_sv','p_agent','p_eng','p_ts','p_te','p_created','d_start','d_end','d_base','d_holidays','prog_actual','b_label','p_remarks','ev_date','ev_lane','ev_text'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('p_corp').value='協電機工株式会社';
+  const dmode=document.querySelector('input[name=progmode][value="days"]'); if(dmode) dmode.checked=true;
   try{ localStorage.removeItem('koutei_state'); }catch(e){}
   if(location.hash){ history.replaceState(null,'',location.pathname+location.search); }
   refresh();
@@ -565,7 +644,7 @@ document.getElementById('btn_clear').onclick=()=>{
   .forEach(id=>document.getElementById(id).addEventListener('input',renderSheetSoft));
 function renderSheetSoft(){ renderSheet(); }
 
-function refresh(){ renderRows(); renderBars(); renderSheet(); saveLocal(); }
+function refresh(){ renderRows(); renderBars(); renderEvents(); renderSheet(); saveLocal(); }
 
 /* ====================== サンプル ====================== */
 document.getElementById('btn_sample').onclick=()=>{
@@ -602,6 +681,16 @@ document.getElementById('btn_sample').onclick=()=>{
   add('試験調整','','2026-01-07','2026-01-08','plan');
   // 実施（赤）の例
   add('空調配管工事','','2025-12-22','2025-12-24','actual');
+  // 出来高%の例（合計100）
+  const setW=(n,w)=>{ const r=state.rows.find(x=>x.name===n); if(r) r.weight=w; };
+  setW('空調配管工事',25); setW('基礎工事',10); setW('室外機据付配管工事',20); setW('ガス配管工事',10);
+  setW('試運転調整',10); setW('フェンス工事',5); setW('配管配線工事',10); setW('停電切替工事',5); setW('試験調整',5);
+  // 行事・検査の例
+  state.events=[
+    {id:++EVID,date:'2025-12-15',lane:'会議',text:'定例会議 10:00'},
+    {id:++EVID,date:'2025-12-23',lane:'検査・立会',text:'停電切替 立会'},
+    {id:++EVID,date:'2025-12-22',lane:'搬入',text:'室外機搬入'},
+  ];
   refresh();
 };
 
@@ -610,15 +699,18 @@ const FIELDS=['p_name','p_number','p_owner','p_sv','p_corp','p_agent','p_eng','p
 function collectState(){
   const f={}; FIELDS.forEach(id=>{ const el=document.getElementById(id); if(el) f[id]=el.value; });
   const pr=document.querySelector('input[name=paper]:checked'); f.paper=pr?pr.value:'A3';
-  return {v:1,f,rows:state.rows,bars:state.bars,RID,BID};
+  const pm=document.querySelector('input[name=progmode]:checked'); f.progmode=pm?pm.value:'days';
+  return {v:1,f,rows:state.rows,bars:state.bars,events:state.events,RID,BID,EVID};
 }
 function applyState(o){
   if(!o||!o.f) return;
   FIELDS.forEach(id=>{ const el=document.getElementById(id); if(el && o.f[id]!==undefined) el.value=o.f[id]; });
   if(o.f.paper){ const r=document.querySelector('input[name=paper][value="'+o.f.paper+'"]'); if(r) r.checked=true; }
-  state.rows=Array.isArray(o.rows)?o.rows:[]; state.bars=Array.isArray(o.bars)?o.bars:[];
+  if(o.f.progmode){ const r=document.querySelector('input[name=progmode][value="'+o.f.progmode+'"]'); if(r) r.checked=true; }
+  state.rows=Array.isArray(o.rows)?o.rows:[]; state.bars=Array.isArray(o.bars)?o.bars:[]; state.events=Array.isArray(o.events)?o.events:[];
   RID=o.RID||state.rows.reduce((m,r)=>Math.max(m,r.id),0);
   BID=o.BID||state.bars.reduce((m,b)=>Math.max(m,b.id),0);
+  EVID=o.EVID||state.events.reduce((m,e)=>Math.max(m,e.id),0);
   setPaper(); refresh();
 }
 function saveLocal(){ try{ localStorage.setItem('koutei_state', JSON.stringify(collectState())); }catch(e){} }
