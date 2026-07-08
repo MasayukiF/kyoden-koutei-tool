@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon.svg">
 <style>
-  :root{ --cellw:22px; --namew:130px; --tantow:52px; --rowh:26px; --daynum:10px; }
+  :root{ --cellw:22px; --namew:130px; --rowh:26px; --daynum:10px; }
   *{ box-sizing:border-box; }
   body{ font-family:"Yu Gothic","Meiryo",sans-serif; margin:0; background:#f4f6f8; color:#222; font-size:14px; }
   h1{ font-size:18px; margin:0; }
@@ -56,6 +56,7 @@
   table.info td.k{ background:#eef2f6; white-space:nowrap; font-weight:bold; }
 
   table.gantt{ border-collapse:collapse; table-layout:fixed; margin-top:6px; border:1.4px solid #555; }
+  table.gantt.hourly{ margin-bottom:14px; }
   table.gantt th,table.gantt td{ border:1px solid #c1c7cd; padding:0; text-align:center; font-size:var(--daynum); line-height:1.1; }
   table.gantt th.name,table.gantt td.name{ width:var(--namew); text-align:left; padding:2px 5px; font-size:11px; white-space:nowrap; overflow:hidden; }
   table.gantt col.namecol{ width:var(--namew); }
@@ -69,14 +70,6 @@
   .sat{ background:#fcdcc4; }    /* 土曜＝橙帯 */
   tr.headerrow td{ background:#f3efe1; font-weight:bold; }
   tr.headerrow td.name::before{ content:"◎ "; }
-  tr.arearow td{ background:#eef2f6; font-weight:bold; }
-  tr.arearow td.name::before{ content:"【"; }
-  tr.arearow td.name::after{ content:"】"; }
-  tr.solorow td.name{ font-weight:bold; }
-  tr.solorow td.name::before{ content:"【"; }
-  tr.solorow td.name::after{ content:"】"; }
-  table.gantt th.tanto,table.gantt td.tanto{ width:var(--tantow); text-align:center; font-size:10px; white-space:nowrap; overflow:hidden; border-right:1.4px solid #555; }
-  table.gantt col.tantocol{ width:var(--tantow); }
   td.name.indent{ padding-left:16px; }
   /* バー線 */
   .pline{ position:absolute; left:-1px; right:-1px; top:34%; border-top:3px solid #111; }
@@ -102,6 +95,9 @@
   table.prog td.k{ background:#eef2f6; font-weight:bold; }
   #o_remarks{ margin-top:8px; border:1px solid #555; min-height:42px; padding:4px 8px; font-size:11px; white-space:pre-wrap; }
   #o_remarks .rk{ font-weight:bold; font-size:11px; color:#1f3a5f; margin-right:6px; }
+
+  /* 工程表モード切替（月間／時間軸）。JSでdisplayを直接切替えるため、hour-onlyだけ初期非表示にしておく */
+  .hour-only{ display:none; }
 
   /* スマホ（iPhone等）向け：パネルを縦積み・ボタンを押しやすく */
   @media (max-width:600px){
@@ -133,6 +129,18 @@
 
 <div class="wrap">
 
+  <!-- ⓪ 工程表の種類 -->
+  <div class="panel no-print">
+    <h2>⓪ 工程表の種類</h2>
+    <div class="body">
+      <div class="toolbar">
+        <label style="font-size:13px"><input type="radio" name="mode" value="month" checked> 月間工程表（日付ベース）</label>
+        <label style="font-size:13px"><input type="radio" name="mode" value="hour"> 1日・時間軸工程表（時間ベース）</label>
+      </div>
+      <p class="hint">空調工事など1日〜数日で終わる工事は「1日・時間軸」を選ぶと、時間単位（夜間〜翌朝など日をまたいでもOK）で作業を並べられます。</p>
+    </div>
+  </div>
+
   <!-- ① 工事情報 -->
   <div class="panel no-print">
     <h2>① 工事情報</h2>
@@ -154,7 +162,7 @@
   </div>
 
   <!-- ② 表示期間（日付軸） -->
-  <div class="panel no-print">
+  <div class="panel no-print month-only">
     <h2>② 表示期間（カレンダー軸）</h2>
     <div class="body">
       <div class="grid">
@@ -175,48 +183,42 @@
     </div>
   </div>
 
+  <!-- ②H 表示期間（時間軸） -->
+  <div class="panel no-print hour-only">
+    <h2>② 表示期間（時間軸）</h2>
+    <div class="body">
+      <div class="grid">
+        <div class="fld"><label>開始日時</label><input type="datetime-local" id="h_start"></div>
+        <div class="fld"><label>終了日時</label><input type="datetime-local" id="h_end"></div>
+      </div>
+      <p class="hint">夜間工事など日をまたぐ場合も、終了日時を翌日にすればそのまま1本の軸になります（例：7/22 17:00 〜 7/23 22:00）。</p>
+    </div>
+  </div>
+
   <!-- ③ 工種 -->
   <div class="panel no-print">
     <h2>③ 工種（行）</h2>
     <div class="body">
       <div class="toolbar" style="margin-bottom:8px">
-        <label style="font-size:12px">工種セット：</label>
-        <label style="font-size:13px"><input type="radio" name="kindset" value="mech" checked> 機械設備</label>
-        <label style="font-size:13px"><input type="radio" name="kindset" value="elec"> 電気設備</label>
-      </div>
-      <div class="toolbar" id="kindset_mech" style="margin-bottom:8px">
         <button class="mini primary" id="btn_master_all">機械設備マスタを一括追加</button>
         <button class="mini" data-master="空調">空調設備工事ひとそろい</button>
-        <button class="mini" data-master="電気">電気設備工事ひとそろい（簡易）</button>
-      </div>
-      <div class="toolbar" id="kindset_elec" style="margin-bottom:8px; display:none">
-        <button class="mini primary" id="btn_elec_standard_all">電気標準一式（3階・2階・1階・屋上・屋外）を追加</button>
-        <button class="mini" id="btn_area_add">＋エリア（階）を追加</button>
-        <button class="mini" id="btn_floorset_add">＋フロア作業セット（配線〜試験調整）</button>
-        <button class="mini" id="btn_roofset_add">＋屋上作業セット</button>
-        <button class="mini" id="btn_outdoorset_add">＋屋外作業セット</button>
-        <button class="mini" id="btn_denkishitsu_add">＋電気室（単独項目）</button>
+        <button class="mini" data-master="電気">電気設備工事ひとそろい</button>
       </div>
       <div class="toolbar" style="margin-bottom:8px">
         <input type="text" id="custom_name" placeholder="自由入力で行を追加" style="min-width:200px">
-        <select id="custom_kind">
-          <option value="task">作業（細目）</option>
-          <option value="header">◎大分類ヘッダ</option>
-          <option value="area">【エリア（階）】</option>
-          <option value="solo">単独項目（【】表示・バー可）</option>
-        </select>
+        <select id="custom_kind"><option value="task">作業（細目）</option><option value="header">◎大分類ヘッダ</option></select>
         <button class="mini" id="btn_custom_add">＋ 行を追加</button>
       </div>
       <table class="editlist" id="rows_table">
-        <thead><tr><th style="width:60px">種別</th><th>名称</th><th style="width:110px">担当</th><th style="width:90px">出来高%</th><th style="width:120px">並べ替え／削除</th></tr></thead>
+        <thead><tr><th style="width:60px">種別</th><th>名称</th><th style="width:90px">出来高%</th><th style="width:120px">並べ替え／削除</th></tr></thead>
         <tbody></tbody>
       </table>
-      <p class="hint">◎ヘッダは「空調設備工事」などの大分類見出し。【エリア】は「3階」「屋上」など階でのグループ分け。単独項目は【電気室】のようにエリア直下に細目を作らず1行だけでバーを引きたいときに使います。作業はその下にぶら下がる細目です。各行の <b>↑↓で並べ替え</b>、<b>✎で名称変更</b>ができます（削除しなくてOK）。<br><b>担当</b>は協力会社名（例：ケイズプラン）。<b>出来高%</b>は「出来高ベース進捗」を使うとき各作業の重み（合計100が目安）。空欄なら無視されます。</p>
+      <p class="hint">◎ヘッダは「空調設備工事」などの大分類見出し。作業はその下にぶら下がる細目です。各行の <b>↑↓で並べ替え</b>、<b>✎で名称変更</b>ができます（削除しなくてOK）。<br><b>出来高%</b>は「出来高ベース進捗」を使うとき各作業の重み（合計100が目安）。空欄なら無視されます。</p>
     </div>
   </div>
 
   <!-- ④ 作業バー -->
-  <div class="panel no-print">
+  <div class="panel no-print month-only">
     <h2>④ 作業バー（予定／実施）</h2>
     <div class="body">
       <div class="grid">
@@ -228,8 +230,6 @@
           <option value="機器据付"><option value="室外機据付"><option value="室内機据付"><option value="基礎工事"><option value="CON打設"><option value="はつり工事">
           <option value="盤据付"><option value="配線工事"><option value="結線"><option value="停電作業"><option value="試運転調整"><option value="試験調整">
           <option value="搬入"><option value="揚重"><option value="養生"><option value="撤去工事"><option value="復旧"><option value="清掃"><option value="検査"><option value="立会">
-          <option value="配線作業"><option value="照明器具付"><option value="配線器具付"><option value="弱電器具付"><option value="盤取付"><option value="盤結線">
-          <option value="配管作業"><option value="盤設置"><option value="発電機設置"><option value="幹線配線"><option value="ダクト設置">
         </datalist>
         <div class="fld"><label>開始日</label><input type="date" id="b_start"></div>
         <div class="fld"><label>終了日</label><input type="date" id="b_end"></div>
@@ -243,11 +243,31 @@
     </div>
   </div>
 
+  <!-- ④H 作業バー（時間軸） -->
+  <div class="panel no-print hour-only">
+    <h2>④ 作業バー（時間軸・予定／実施）</h2>
+    <div class="body">
+      <div class="grid">
+        <div class="fld"><label>工種（どの行に引く）</label><select id="hb_row"></select></div>
+        <div class="fld"><label>作業名（任意）</label><input type="text" id="hb_label" list="task_templates" placeholder="例）室外機撤去"></div>
+        <div class="fld"><label>開始日時</label><input type="datetime-local" id="hb_start"></div>
+        <div class="fld"><label>終了日時</label><input type="datetime-local" id="hb_end"></div>
+        <div class="fld"><label>種別</label><select id="hb_type"><option value="plan">予定工程（黒）</option><option value="actual">実施工程（赤）</option></select></div>
+        <div class="fld" style="justify-content:flex-end"><button class="primary" id="btn_hbar_add">＋ バーを追加</button></div>
+      </div>
+      <table class="editlist" id="hbars_table" style="margin-top:10px">
+        <thead><tr><th>工種</th><th>作業名</th><th>種別</th><th>開始</th><th>終了</th><th style="width:60px">削除</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="hint">③の工種を先に作ってから、ここで時間を指定してバーを引きます。工種は月間モードと共通です。</p>
+    </div>
+  </div>
+
   <!-- ⑤ 進捗率・備考・操作 -->
   <div class="panel no-print">
     <h2>⑤ 進捗率・備考・印刷</h2>
     <div class="body">
-      <div class="grid">
+      <div class="grid month-only">
         <div class="fld"><label>進捗の計算方法</label>
           <div style="display:flex;gap:14px;align-items:center;font-size:13px;padding-top:4px">
             <label><input type="radio" name="progmode" value="days" checked> 日数ベース</label>
@@ -266,8 +286,8 @@
         <label style="font-size:13px"><input type="radio" name="paper" value="A3" checked> A3横</label>
         <label style="font-size:13px"><input type="radio" name="paper" value="A4"> A4横</label>
         <button class="primary" id="btn_print">🖨 印刷 / PDFで保存</button>
-        <button class="mini" id="btn_sample">機械サンプルを入れて試す</button>
-        <button class="mini" id="btn_sample_elec">電気サンプル（熊本高専例）を入れて試す</button>
+        <button class="mini month-only" id="btn_sample">サンプルを入れて試す</button>
+        <button class="mini hour-only" id="btn_sample_hour">1日サンプルを入れて試す</button>
         <button class="mini danger" id="btn_clear">全部クリア</button>
       </div>
       <p class="hint">
@@ -295,7 +315,7 @@
   </div>
 
   <!-- ⑦ 行事・検査 -->
-  <div class="panel no-print">
+  <div class="panel no-print month-only">
     <h2>⑦ 行事・検査（日付ごと・任意）</h2>
     <div class="body">
       <div class="grid">
@@ -337,7 +357,7 @@
 
 <script>
 /* ====================== 状態 ====================== */
-let RID=0, BID=0, EVID=0;
+let RID=0, BID=0, EVID=0, HBID=0;
 const MASTER=[
   {kind:'header',name:'空調設備工事'},
   {kind:'task',name:'空調配管工事'},
@@ -351,12 +371,7 @@ const MASTER=[
   {kind:'task',name:'停電切替工事'},
   {kind:'task',name:'試験調整'},
 ];
-/* 電気設備工事：実物（下田さん作成・熊本高専の月間工程表）から起こした作業マスタ。
-   現場ごとに階数が違うため、エリアと作業セットは個別ボタンで組み合わせる方式にしている。 */
-const ELECTRIC_FLOOR_TASKS=['配線作業','照明器具付','配線器具付','弱電器具付','盤取付','盤結線','試験調整'];
-const ELECTRIC_ROOF_TASKS=['配管作業','配線作業','盤設置'];
-const ELECTRIC_OUTDOOR_TASKS=['発電機設置','配管作業','配線作業','試運転調整','幹線配線','ダクト設置'];
-const state={ rows:[], bars:[], events:[] };
+const state={ rows:[], bars:[], events:[], hbars:[], mode:'month' };
 
 /* ====================== 日付ヘルパ ====================== */
 const WD=['日','月','火','水','木','金','土'];
@@ -365,6 +380,18 @@ function fmtD(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'
 function diffDays(a,b){ return Math.round((parseD(b)-parseD(a))/86400000); }
 function eachDay(s,e){ const out=[]; let d=parseD(s),end=parseD(e); if(!d||!end||d>end) return out; while(d<=end){ out.push(new Date(d)); d.setDate(d.getDate()+1);} return out; }
 function val(id){ return document.getElementById(id).value.trim(); }
+/* ====================== 時間軸ヘルパ（1日・時間軸モード用） ====================== */
+/* datetime-local の値 "YYYY-MM-DDTHH:mm" をローカル時刻のDateに変換（ブラウザ差異を避けるため手動パース） */
+function parseHDT(s){ if(!s) return null; const [d,t]=s.split('T'); const p=d.split('-'); const tp=(t||'0:0').split(':'); return new Date(+p[0],+p[1]-1,+p[2],+tp[0],+tp[1]||0); }
+function floorHour(s){ const d=parseHDT(s); if(!d) return null; return new Date(d.getFullYear(),d.getMonth(),d.getDate(),d.getHours()); }
+function pad2(n){ return String(n).padStart(2,'0'); }
+/* 開始〜終了の間、1時間刻みでスロットを作る（両端を含む＝終了時刻の“時”も1列出す） */
+function eachHour(s,e){
+  const out=[]; const d=floorHour(s), end=floorHour(e); if(!d||!end||d>end) return out;
+  let cur=new Date(d);
+  while(cur<=end){ out.push(new Date(cur)); cur=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate(),cur.getHours()+1); }
+  return out;
+}
 /* 和暦（公共工事は令和表記が標準。入力はISOのまま、表示だけ変換） */
 function gengo(y){ if(y>=2019) return ['令和',y-2018]; if(y>=1989) return ['平成',y-1988]; if(y>=1926) return ['昭和',y-1925]; return ['西暦',y]; }
 function warekiYMD(s){ const d=parseD(s); if(!d) return ''; const [g,n]=gengo(d.getFullYear()); return `${g}${n===1?'元':n}年${d.getMonth()+1}月${d.getDate()}日`; }
@@ -388,27 +415,14 @@ function jpHolidays(year){
 }
 
 /* ====================== 工種（行） ====================== */
-const KIND_LABEL={header:'◎ヘッダ',area:'【エリア】',task:'作業',solo:'単独項目'};
-function addRow(kind,name){ const r={id:++RID,kind,name}; state.rows.push(r); return r; }
-/* 行が属する直近の◎ヘッダ／【エリア】をラベル化（同名タスクが複数エリアにまたがる時の見分け用） */
-function rowContextLabel(rowId){
-  let ctx='';
-  for(const r of state.rows){
-    if(r.kind==='header'){ ctx='◎'+r.name; continue; }
-    if(r.kind==='area'){ ctx='【'+r.name+'】'; continue; }
-    if(r.id===rowId) return ctx? ctx+' '+r.name : r.name;
-  }
-  return null;
-}
+function addRow(kind,name){ state.rows.push({id:++RID,kind,name}); }
 function renderRows(){
   const tb=document.querySelector('#rows_table tbody'); tb.innerHTML='';
-  const hasBar = r=>r.kind==='task'||r.kind==='solo';
   state.rows.forEach((r,i)=>{
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${KIND_LABEL[r.kind]||r.kind}</td>
+    tr.innerHTML=`<td>${r.kind==='header'?'◎ヘッダ':'作業'}</td>
       <td>${r.name}</td>
-      <td>${hasBar(r)?`<input type="text" value="${(r.tanto||'').replace(/"/g,'&quot;')}" data-tanto="${r.id}" style="width:100%" placeholder="例）ケイズプラン">`:''}</td>
-      <td>${hasBar(r)?`<input type="number" min="0" step="0.1" value="${r.weight!=null?r.weight:''}" data-weight="${r.id}" style="width:72px" placeholder="—">`:''}</td>
+      <td>${r.kind==='task'?`<input type="number" min="0" step="0.1" value="${r.weight!=null?r.weight:''}" data-weight="${r.id}" style="width:72px" placeholder="—">`:''}</td>
       <td class="row-actions">
         <button class="mini" data-up="${r.id}">↑</button>
         <button class="mini" data-down="${r.id}">↓</button>
@@ -417,10 +431,12 @@ function renderRows(){
       </td>`;
     tb.appendChild(tr);
   });
-  // バー追加用セレクト（エリア／ヘッダ名を添えて同名タスクを見分けられるように）
-  const sel=document.getElementById('b_row'); sel.innerHTML='';
-  state.rows.filter(hasBar).forEach(r=>{
-    const o=document.createElement('option'); o.value=r.id; o.textContent=rowContextLabel(r.id)||r.name; sel.appendChild(o);
+  // バー追加用セレクト（月間・時間軸の両方）
+  ['b_row','hb_row'].forEach(selId=>{
+    const sel=document.getElementById(selId); sel.innerHTML='';
+    state.rows.filter(r=>r.kind==='task').forEach(r=>{
+      const o=document.createElement('option'); o.value=r.id; o.textContent=r.name; sel.appendChild(o);
+    });
   });
 }
 
@@ -430,10 +446,24 @@ function renderBars(){
   state.bars.forEach(b=>{
     const r=state.rows.find(x=>x.id===b.rowId);
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${r?(rowContextLabel(r.id)||r.name):'(削除済)'}</td><td>${b.label||''}</td>
+    tr.innerHTML=`<td>${r?r.name:'(削除済)'}</td><td>${b.label||''}</td>
       <td><span class="pill ${b.type}">${b.type==='plan'?'予定':'実施'}</span></td>
       <td>${b.start}</td><td>${b.end}</td>
       <td><button class="mini danger" data-delbar="${b.id}">削除</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+
+/* ====================== バー（時間軸） ====================== */
+function renderHBars(){
+  const tb=document.querySelector('#hbars_table tbody'); tb.innerHTML='';
+  state.hbars.forEach(b=>{
+    const r=state.rows.find(x=>x.id===b.rowId);
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${r?r.name:'(削除済)'}</td><td>${b.label||''}</td>
+      <td><span class="pill ${b.type}">${b.type==='plan'?'予定':'実施'}</span></td>
+      <td>${b.start.replace('T',' ')}</td><td>${b.end.replace('T',' ')}</td>
+      <td><button class="mini danger" data-delhbar="${b.id}">削除</button></td>`;
     tb.appendChild(tr);
   });
 }
@@ -455,14 +485,26 @@ const PAGEPX={ A4:1040, A3:1500 };
 function fitColumns(nDays){
   const paper=(document.querySelector('input[name=paper]:checked')||{}).value || 'A3';
   const avail=PAGEPX[paper]||1040;
-  const namew=130, tantow=52;
-  let cw = nDays>0 ? Math.floor((avail-namew-tantow)/nDays) : 22;
+  const namew=130;
+  let cw = nDays>0 ? Math.floor((avail-namew)/nDays) : 22;
   cw = Math.max(15, Math.min(40, cw));      // 細すぎ・太すぎを防ぐ
   const root=document.documentElement.style;
   root.setProperty('--cellw', cw+'px');
   root.setProperty('--namew', namew+'px');
-  root.setProperty('--tantow', tantow+'px');
   root.setProperty('--daynum', (cw<18?9:10)+'px');
+}
+/* 時間軸：1テーブルに入る時間列数を決め、それに合わせて列幅をそろえる（長い軸は複数テーブルに分割） */
+function fitColumnsHour(){
+  const paper=(document.querySelector('input[name=paper]:checked')||{}).value || 'A3';
+  const avail=PAGEPX[paper]||1040;
+  const namew=130;
+  const perTable = Math.max(6, Math.min(24, Math.floor((avail-namew)/34)));
+  const cw = Math.floor((avail-namew)/perTable);
+  const root=document.documentElement.style;
+  root.setProperty('--cellw', cw+'px');
+  root.setProperty('--namew', namew+'px');
+  root.setProperty('--daynum', (cw<38?8:9)+'px');
+  return perTable;
 }
 
 /* ====================== 工程表プレビュー描画 ====================== */
@@ -484,6 +526,8 @@ function renderSheet(){
   });
   if(tr.children.length) it.appendChild(tr);
 
+  if(state.mode==='hour'){ renderHourGantt(); renderRemarks(); return; }
+
   // 日付軸
   const ds=val('d_start'), de=val('d_end');
   const days=eachDay(ds,de);
@@ -503,9 +547,9 @@ function renderSheet(){
   const dayClass=d=>{ const k=fmtD(d); if(d.getDay()===0||holidays.includes(k)) return 'sun'; if(d.getDay()===6) return 'sat'; return ''; };
 
   // colgroup
-  let html='<table class="gantt"><colgroup><col class="namecol"><col class="tantocol">'+days.map(()=>'<col class="day">').join('')+'</colgroup>';
+  let html='<table class="gantt"><colgroup><col class="namecol">'+days.map(()=>'<col class="day">').join('')+'</colgroup>';
   // 月グループ行（令和表記）
-  html+='<thead><tr><th class="name" rowspan="3">工　種</th><th class="tanto" rowspan="3">担当</th>';
+  html+='<thead><tr><th class="name" rowspan="3">工　種</th>';
   let i=0;
   while(i<days.length){ const y=days[i].getFullYear(),m=days[i].getMonth(); let span=0; while(i+span<days.length&&days[i+span].getFullYear()===y&&days[i+span].getMonth()===m) span++; html+=`<th class="month" colspan="${span}">${warekiYM(y,m)}</th>`; i+=span; }
   html+='</tr>';
@@ -518,17 +562,11 @@ function renderSheet(){
   html+='<tbody>';
   state.rows.forEach(r=>{
     if(r.kind==='header'){
-      html+=`<tr class="headerrow"><td class="name">${r.name}</td><td class="tanto"></td>`+days.map(d=>`<td class="day ${dayClass(d)}"></td>`).join('')+'</tr>';
-      return;
-    }
-    if(r.kind==='area'){
-      html+=`<tr class="arearow"><td class="name">${r.name}</td><td class="tanto"></td>`+days.map(d=>`<td class="day ${dayClass(d)}"></td>`).join('')+'</tr>';
+      html+=`<tr class="headerrow"><td class="name">${r.name}</td>`+days.map(d=>`<td class="day ${dayClass(d)}"></td>`).join('')+'</tr>';
       return;
     }
     const bars=state.bars.filter(b=>b.rowId===r.id);
-    const rowCls = r.kind==='solo' ? ' class="solorow"' : '';
-    const nameCls = r.kind==='solo' ? 'name' : 'name indent';
-    html+=`<tr${rowCls}><td class="${nameCls}">${r.name}</td><td class="tanto">${(r.tanto||'').replace(/</g,'&lt;')}</td>`;
+    html+=`<tr><td class="name indent">${r.name}</td>`;
     html+=days.map(d=>{
       const k=fmtD(d); let inner='';
       bars.forEach(b=>{
@@ -561,6 +599,72 @@ function renderSheet(){
   html+='</tbody></table>';
   gw.innerHTML=html;
   renderProg(); renderRemarks();
+}
+
+/* ====================== 工程表プレビュー描画（1日・時間軸モード） ====================== */
+function renderHourGantt(){
+  document.getElementById('o_prog').innerHTML=''; // 時間軸モードでは進捗率は使わない
+  const hs=val('h_start'), he=val('h_end');
+  const hours=eachHour(hs,he);
+  const holidays=val('d_holidays').split(',').map(s=>s.trim()).filter(Boolean);
+  const gw=document.getElementById('o_gantt');
+  if(hours.length===0){
+    document.getElementById('o_term').textContent='　';
+    gw.innerHTML='<p style="color:#888;font-size:12px;padding:8px">②表示期間（時間軸）を入れると、ここに工程表が出ます。</p>';
+    return;
+  }
+  const perTable=fitColumnsHour();
+  const dayClass=d=>{ const k=fmtD(d); if(d.getDay()===0||holidays.includes(k)) return 'sun'; if(d.getDay()===6) return 'sat'; return ''; };
+
+  document.getElementById('o_term').textContent =
+    warekiYMD(fmtD(hours[0]))+' '+pad2(hours[0].getHours())+':00 〜 '+
+    warekiYMD(fmtD(hours[hours.length-1]))+' '+pad2(hours[hours.length-1].getHours())+':00';
+
+  let html='';
+  for(let i=0;i<hours.length;i+=perTable){
+    const chunk=hours.slice(i,i+perTable);
+    html+='<table class="gantt hourly"><colgroup><col class="namecol">'+chunk.map(()=>'<col class="day">').join('')+'</colgroup>';
+    // 日付グループ行
+    html+='<thead><tr><th class="name" rowspan="2">工　種</th>';
+    let j=0;
+    while(j<chunk.length){ const key=fmtD(chunk[j]); let span=0; while(j+span<chunk.length && fmtD(chunk[j+span])===key) span++; html+=`<th class="month" colspan="${span}">${warekiYMD(key)}</th>`; j+=span; }
+    html+='</tr>';
+    // 時刻行
+    html+='<tr>'+chunk.map(h=>`<th class="day ${dayClass(h)}">${pad2(h.getHours())}:00</th>`).join('')+'</tr></thead>';
+
+    html+='<tbody>';
+    state.rows.forEach(r=>{
+      if(r.kind==='header'){
+        html+=`<tr class="headerrow"><td class="name">${r.name}</td>`+chunk.map(h=>`<td class="day ${dayClass(h)}"></td>`).join('')+'</tr>';
+        return;
+      }
+      const bars=state.hbars.filter(b=>b.rowId===r.id);
+      html+=`<tr><td class="name indent">${r.name}</td>`;
+      html+=chunk.map(h=>{
+        const k=h.getTime(); let inner='';
+        bars.forEach(b=>{
+          const bs=floorHour(b.start), be=floorHour(b.end); if(!bs||!be) return;
+          const bsT=bs.getTime(), beT=be.getTime();
+          if(k>=bsT && k<=beT){
+            const isStart=(k===bsT), isEnd=(k===beT);
+            if(b.type==='plan'){
+              inner+='<div class="pline"></div>';
+              if(isStart){ inner+='<div class="pcap" style="left:0"></div>'; if(b.label) inner+=`<span class="blabel">${b.label}</span>`; }
+              if(isEnd) inner+='<div class="pcap" style="right:0"></div>';
+            }else{
+              inner+='<div class="aline"></div>';
+              if(isStart){ inner+='<div class="acap" style="left:0"></div>'; if(b.label) inner+=`<span class="blabel a">${b.label}</span>`; }
+              if(isEnd) inner+='<div class="acap" style="right:0"></div>';
+            }
+          }
+        });
+        return `<td class="day ${dayClass(h)}">${inner}</td>`;
+      }).join('');
+      html+='</tr>';
+    });
+    html+='</tbody></table>';
+  }
+  gw.innerHTML=html;
 }
 
 /* ====================== 進捗率 ====================== */
@@ -627,34 +731,8 @@ document.getElementById('rows_table').onclick=e=>{
   refresh();
 };
 document.getElementById('rows_table').addEventListener('input',e=>{
-  const t=e.target; if(!t.dataset) return;
-  if(t.dataset.weight){ const r=state.rows.find(x=>x.id==t.dataset.weight); if(r){ r.weight = t.value===''?null:parseFloat(t.value); renderSheet(); saveLocal(); } }
-  if(t.dataset.tanto){ const r=state.rows.find(x=>x.id==t.dataset.tanto); if(r){ r.tanto = t.value; renderSheet(); saveLocal(); } }
+  const t=e.target; if(t.dataset && t.dataset.weight){ const r=state.rows.find(x=>x.id==t.dataset.weight); if(r){ r.weight = t.value===''?null:parseFloat(t.value); renderSheet(); saveLocal(); } }
 });
-document.querySelectorAll('input[name=kindset]').forEach(r=>r.onchange=()=>{
-  const v=document.querySelector('input[name=kindset]:checked').value;
-  document.getElementById('kindset_mech').style.display = v==='mech' ? '' : 'none';
-  document.getElementById('kindset_elec').style.display = v==='elec' ? '' : 'none';
-});
-function addAreaWithTasks(areaName,tasks){ addRow('area',areaName); tasks.forEach(n=>addRow('task',n)); }
-document.getElementById('btn_elec_standard_all').onclick=()=>{
-  addAreaWithTasks('3階',ELECTRIC_FLOOR_TASKS);
-  addAreaWithTasks('2階',ELECTRIC_FLOOR_TASKS);
-  addAreaWithTasks('1階',ELECTRIC_FLOOR_TASKS);
-  addAreaWithTasks('屋上',ELECTRIC_ROOF_TASKS);
-  addAreaWithTasks('屋外',ELECTRIC_OUTDOOR_TASKS);
-  addRow('solo','電気室');
-  refresh();
-};
-document.getElementById('btn_area_add').onclick=()=>{
-  const n=prompt('エリア（階）の名前を入れてください\n例）3階／屋上／屋外','');
-  if(n===null || !n.trim()) return;
-  addRow('area',n.trim()); refresh();
-};
-document.getElementById('btn_floorset_add').onclick=()=>{ ELECTRIC_FLOOR_TASKS.forEach(n=>addRow('task',n)); refresh(); };
-document.getElementById('btn_roofset_add').onclick=()=>{ ELECTRIC_ROOF_TASKS.forEach(n=>addRow('task',n)); refresh(); };
-document.getElementById('btn_outdoorset_add').onclick=()=>{ ELECTRIC_OUTDOOR_TASKS.forEach(n=>addRow('task',n)); refresh(); };
-document.getElementById('btn_denkishitsu_add').onclick=()=>{ addRow('solo','電気室'); refresh(); };
 document.getElementById('btn_bar_add').onclick=()=>{
   const rowId=+document.getElementById('b_row').value;
   if(!rowId){ alert('先に③で工種（作業の行）を追加してください'); return; }
@@ -667,6 +745,19 @@ document.getElementById('btn_bar_add').onclick=()=>{
 document.getElementById('bars_table').onclick=e=>{
   const b=e.target.closest('button'); if(!b) return;
   if(b.dataset.delbar){ state.bars=state.bars.filter(x=>x.id!=b.dataset.delbar); refresh(); }
+};
+document.getElementById('btn_hbar_add').onclick=()=>{
+  const rowId=+document.getElementById('hb_row').value;
+  if(!rowId){ alert('先に③で工種（作業の行）を追加してください'); return; }
+  const s=val('hb_start'), e=val('hb_end');
+  if(!s||!e){ alert('開始日時・終了日時を入れてください'); return; }
+  if(s>e){ alert('終了日時は開始日時より後にしてください'); return; }
+  state.hbars.push({id:++HBID,rowId,label:val('hb_label'),start:s,end:e,type:document.getElementById('hb_type').value});
+  document.getElementById('hb_label').value=''; refresh();
+};
+document.getElementById('hbars_table').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  if(b.dataset.delhbar){ state.hbars=state.hbars.filter(x=>x.id!=b.dataset.delhbar); refresh(); }
 };
 document.getElementById('btn_ev_add').onclick=()=>{
   const d=val('ev_date'), t=val('ev_text');
@@ -701,6 +792,16 @@ document.getElementById('btn_thismonth').onclick=()=>{
 };
 document.querySelectorAll('input[name=paper]').forEach(r=>r.onchange=()=>{ setPaper(); renderSheet(); });
 document.querySelectorAll('input[name=progmode]').forEach(r=>r.onchange=()=>{ renderSheet(); saveLocal(); });
+/* ====================== モード切替（月間／時間軸） ====================== */
+function applyModeVisibility(){
+  const hourMode = state.mode==='hour';
+  document.querySelectorAll('.month-only').forEach(el=>el.style.display = hourMode? 'none' : '');
+  document.querySelectorAll('.hour-only').forEach(el=>el.style.display = hourMode? '' : 'none');
+}
+document.querySelectorAll('input[name=mode]').forEach(r=>r.onchange=()=>{
+  state.mode=document.querySelector('input[name=mode]:checked').value;
+  applyModeVisibility(); renderSheet(); saveLocal();
+});
 function setPaper(){
   const size=document.querySelector('input[name=paper]:checked').value;
   let st=document.getElementById('pagestyle');
@@ -710,29 +811,31 @@ function setPaper(){
 document.getElementById('btn_print').onclick=()=>{ setPaper(); window.print(); };
 document.getElementById('btn_clear').onclick=()=>{
   if(!confirm('入力を全部消します。よろしいですか？')) return;
-  state.rows=[]; state.bars=[]; state.events=[];
-  ['p_name','p_number','p_owner','p_sv','p_agent','p_eng','p_ts','p_te','p_created','d_start','d_end','d_base','d_holidays','prog_actual','b_label','p_remarks','ev_date','ev_lane','ev_text'].forEach(id=>document.getElementById(id).value='');
+  state.rows=[]; state.bars=[]; state.events=[]; state.hbars=[];
+  ['p_name','p_number','p_owner','p_sv','p_agent','p_eng','p_ts','p_te','p_created','d_start','d_end','d_base','d_holidays','prog_actual','b_label','p_remarks','ev_date','ev_lane','ev_text','h_start','h_end','hb_label'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('p_corp').value='協電機工株式会社';
   const dmode=document.querySelector('input[name=progmode][value="days"]'); if(dmode) dmode.checked=true;
-  const mechR=document.querySelector('input[name=kindset][value="mech"]');
-  if(mechR){ mechR.checked=true; document.getElementById('kindset_mech').style.display=''; document.getElementById('kindset_elec').style.display='none'; }
+  const mmode=document.querySelector('input[name=mode][value="month"]'); if(mmode) mmode.checked=true;
+  state.mode='month'; applyModeVisibility();
   try{ localStorage.removeItem('koutei_state'); }catch(e){}
   if(location.hash){ history.replaceState(null,'',location.pathname+location.search); }
   refresh();
 };
 
 /* 全入力で再描画 */
-['p_name','p_number','p_owner','p_sv','p_corp','p_agent','p_eng','p_ts','p_te','p_created','d_start','d_end','d_base','d_holidays','prog_actual','p_remarks']
+['p_name','p_number','p_owner','p_sv','p_corp','p_agent','p_eng','p_ts','p_te','p_created','d_start','d_end','d_base','d_holidays','prog_actual','p_remarks','h_start','h_end']
   .forEach(id=>document.getElementById(id).addEventListener('input',renderSheetSoft));
 function renderSheetSoft(){ renderSheet(); }
 
-function refresh(){ renderRows(); renderBars(); renderEvents(); renderSheet(); saveLocal(); }
+function refresh(){ renderRows(); renderBars(); renderHBars(); renderEvents(); renderSheet(); saveLocal(); }
 
 /* ====================== サンプル ====================== */
 document.getElementById('btn_sample').onclick=()=>{
   const hasData = state.rows.length || state.bars.length || val('p_name') || val('d_start');
   if(hasData && !confirm('今の入力をサンプルで上書きします。よろしいですか？')) return;
-  state.rows=[]; state.bars=[];
+  state.rows=[]; state.bars=[]; state.hbars=[];
+  const mmode=document.querySelector('input[name=mode][value="month"]'); if(mmode) mmode.checked=true;
+  state.mode='month'; applyModeVisibility();
   document.getElementById('p_name').value='○○小学校 給食室空調設備工事';
   document.getElementById('p_owner').value='熊本市長 ○○ ○○ 様';
   document.getElementById('p_sv').value='都市建設局公共建築部 設備課';
@@ -776,86 +879,63 @@ document.getElementById('btn_sample').onclick=()=>{
   refresh();
 };
 
-/* 電気サンプル（下田さん作成・熊本高専の実物月間工程表を再現） */
-document.getElementById('btn_sample_elec').onclick=()=>{
-  const hasData = state.rows.length || state.bars.length || val('p_name') || val('d_start');
-  if(hasData && !confirm('今の入力を電気サンプルで上書きします。よろしいですか？')) return;
-  state.rows=[]; state.bars=[];
-  document.getElementById('p_name').value='熊本高専 電気設備工事';
+document.getElementById('btn_sample_hour').onclick=()=>{
+  const hasData = state.rows.length || state.hbars.length || val('h_start');
+  if(hasData && !confirm('今の入力をサンプルで上書きします。よろしいですか？')) return;
+  state.rows=[]; state.bars=[]; state.hbars=[];
+  const hmode=document.querySelector('input[name=mode][value="hour"]'); if(hmode) hmode.checked=true;
+  state.mode='hour'; applyModeVisibility();
+  document.getElementById('p_name').value='○○ ミスタードーナツ 店舗改修に伴う空調切替工事';
   document.getElementById('p_owner').value='';
   document.getElementById('p_sv').value='';
   document.getElementById('p_corp').value='協電機工株式会社';
-  document.getElementById('p_agent').value='下田';
-  document.getElementById('p_eng').value='';
-  document.getElementById('p_ts').value='';
-  document.getElementById('p_te').value='';
-  document.getElementById('p_created').value='2023-03-29';
-  document.getElementById('d_start').value='2023-03-26';
-  document.getElementById('d_end').value='2023-05-30';
-  document.getElementById('d_base').value='';
-  document.getElementById('d_holidays').value='';
-  document.getElementById('prog_actual').value='';
-  document.getElementById('p_remarks').value='電気室：日程確認中';
-  const dmode=document.querySelector('input[name=kindset][value="elec"]');
-  if(dmode){ dmode.checked=true; document.getElementById('kindset_mech').style.display='none'; document.getElementById('kindset_elec').style.display=''; }
-  const addTask=(name,tanto)=>{ const r=addRow('task',name); if(tanto) r.tanto=tanto; return r; };
-  const bar=(row,s,e,label)=>{ if(row) state.bars.push({id:++BID,rowId:row.id,label:label||'',start:s,end:e,type:'plan'}); };
-  addRow('area','3階');
-  bar(addTask('配線作業','ケイズプラン'),'2023-03-29','2023-04-01');
-  bar(addTask('照明器具付','ケイズプラン'),'2023-03-29','2023-04-01');
-  bar(addTask('配線器具付',''),'2023-04-03','2023-04-08');
-  bar(addTask('弱電器具付','東亜機器'),'2023-04-03','2023-04-08');
-  bar(addTask('盤取付','ケイズプラン'),'2023-04-24','2023-04-28');
-  bar(addTask('盤結線','ケイズプラン'),'2023-05-01','2023-05-12');
-  bar(addTask('試験調整',''),'2023-05-20','2023-05-30');
-  addRow('area','2階');
-  bar(addTask('配線作業','ケイズプラン'),'2023-03-29','2023-04-07');
-  bar(addTask('照明器具付','ケイズプラン'),'2023-03-29','2023-04-07');
-  bar(addTask('配線器具付','ケイズプラン'),'2023-04-10','2023-04-15');
-  bar(addTask('弱電器具付','東亜機器'),'2023-04-03','2023-04-08');
-  bar(addTask('盤取付','ケイズプラン'),'2023-04-24','2023-04-28');
-  bar(addTask('盤結線','ケイズプラン'),'2023-05-01','2023-05-12');
-  bar(addTask('試験調整',''),'2023-05-20','2023-05-30');
-  addRow('area','1階');
-  bar(addTask('配線作業','九州インフォ'),'2023-03-29','2023-04-08');
-  bar(addTask('照明器具付','九州インフォ'),'2023-03-29','2023-04-08');
-  bar(addTask('配線器具付','九州インフォ'),'2023-04-10','2023-04-15');
-  bar(addTask('弱電器具付','東亜機器'),'2023-04-03','2023-04-15');
-  bar(addTask('盤取付','ケイズプラン'),'2023-04-24','2023-04-28');
-  bar(addTask('盤結線','ケイズプラン'),'2023-05-01','2023-05-12');
-  bar(addTask('試験調整',''),'2023-05-20','2023-05-30');
-  addRow('area','屋上');
-  bar(addTask('配管作業',''),'2023-05-20','2023-05-30');
-  bar(addTask('配線作業',''),'2023-05-20','2023-05-30');
-  bar(addTask('盤設置',''),'2023-04-25','2023-04-30');
-  addRow('area','屋外');
-  bar(addTask('発電機設置','日向風'),'2023-04-30','2023-05-10');
-  bar(addTask('配管作業',''),'2023-05-11','2023-05-13');
-  bar(addTask('配線作業',''),'2023-05-13','2023-05-15');
-  bar(addTask('試運転調整','旭電業'),'2023-05-25','2023-05-30');
-  bar(addTask('幹線配線',''),'2023-04-17','2023-04-29');
-  bar(addTask('ダクト設置',''),'2023-04-10','2023-04-15');
-  bar(addRow('solo','電気室'),'2023-05-25','2023-05-30','日程確認');
+  document.getElementById('p_agent').value='崎元 智美';
+  document.getElementById('p_created').value='2026-07-08';
+  document.getElementById('h_start').value='2026-07-22T17:00';
+  document.getElementById('h_end').value='2026-07-23T22:00';
+  document.getElementById('p_remarks').value='※熱中症対策として、小休憩をはさみながら作業を行います\n※作業状況によっては、工程表通りに進まない可能性があります';
+  ['準備・片付','既設空調機撤去','配管作業','新設空調機設置','試運転調整','クレーン工事'].forEach(n=>addRow('task',n));
+  const byName=n=>{ const r=state.rows.find(x=>x.name===n); return r?r.id:null; };
+  const addh=(n,label,s,e,t)=>{ const id=byName(n); if(id) state.hbars.push({id:++HBID,rowId:id,label,start:s,end:e,type:t||'plan'}); };
+  addh('準備・片付','機械準備','2026-07-22T17:00','2026-07-22T18:00');
+  addh('準備・片付','準備','2026-07-22T23:00','2026-07-23T00:00');
+  addh('準備・片付','養生','2026-07-23T00:00','2026-07-23T01:00');
+  addh('既設空調機撤去','室外機切離・撤去','2026-07-23T01:00','2026-07-23T03:00');
+  addh('既設空調機撤去','室内機撤去','2026-07-23T04:00','2026-07-23T06:00');
+  addh('配管作業','配線・配管作業','2026-07-23T03:00','2026-07-23T06:00');
+  addh('配管作業','配管作業','2026-07-23T08:00','2026-07-23T11:00');
+  addh('新設空調機設置','室外機据付','2026-07-23T03:00','2026-07-23T05:00');
+  addh('新設空調機設置','室内機据付','2026-07-23T09:00','2026-07-23T11:00');
+  addh('試運転調整','試運転','2026-07-23T11:00','2026-07-23T13:00');
+  addh('準備・片付','片付け','2026-07-23T11:00','2026-07-23T13:00');
+  addh('クレーン工事','通行止準備','2026-07-23T01:00','2026-07-23T02:00');
+  addh('クレーン工事','室外機搬出・搬入','2026-07-23T02:00','2026-07-23T04:00');
+  addh('クレーン工事','通行止解除','2026-07-23T04:00','2026-07-23T05:00');
   refresh();
 };
 
 /* ====================== 保存・共有 ====================== */
-const FIELDS=['p_name','p_number','p_owner','p_sv','p_corp','p_agent','p_eng','p_ts','p_te','p_created','d_start','d_end','d_base','d_holidays','prog_actual','p_remarks'];
+const FIELDS=['p_name','p_number','p_owner','p_sv','p_corp','p_agent','p_eng','p_ts','p_te','p_created','d_start','d_end','d_base','d_holidays','prog_actual','p_remarks','h_start','h_end'];
 function collectState(){
   const f={}; FIELDS.forEach(id=>{ const el=document.getElementById(id); if(el) f[id]=el.value; });
   const pr=document.querySelector('input[name=paper]:checked'); f.paper=pr?pr.value:'A3';
   const pm=document.querySelector('input[name=progmode]:checked'); f.progmode=pm?pm.value:'days';
-  return {v:1,f,rows:state.rows,bars:state.bars,events:state.events,RID,BID,EVID};
+  f.mode=state.mode;
+  return {v:2,f,rows:state.rows,bars:state.bars,events:state.events,hbars:state.hbars,RID,BID,EVID,HBID};
 }
 function applyState(o){
   if(!o||!o.f) return;
   FIELDS.forEach(id=>{ const el=document.getElementById(id); if(el && o.f[id]!==undefined) el.value=o.f[id]; });
   if(o.f.paper){ const r=document.querySelector('input[name=paper][value="'+o.f.paper+'"]'); if(r) r.checked=true; }
   if(o.f.progmode){ const r=document.querySelector('input[name=progmode][value="'+o.f.progmode+'"]'); if(r) r.checked=true; }
-  state.rows=Array.isArray(o.rows)?o.rows:[]; state.bars=Array.isArray(o.bars)?o.bars:[]; state.events=Array.isArray(o.events)?o.events:[];
+  state.mode = o.f.mode==='hour' ? 'hour' : 'month';
+  const mr=document.querySelector('input[name=mode][value="'+state.mode+'"]'); if(mr) mr.checked=true;
+  applyModeVisibility();
+  state.rows=Array.isArray(o.rows)?o.rows:[]; state.bars=Array.isArray(o.bars)?o.bars:[]; state.events=Array.isArray(o.events)?o.events:[]; state.hbars=Array.isArray(o.hbars)?o.hbars:[];
   RID=o.RID||state.rows.reduce((m,r)=>Math.max(m,r.id),0);
   BID=o.BID||state.bars.reduce((m,b)=>Math.max(m,b.id),0);
   EVID=o.EVID||state.events.reduce((m,e)=>Math.max(m,e.id),0);
+  HBID=o.HBID||state.hbars.reduce((m,b)=>Math.max(m,b.id),0);
   setPaper(); refresh();
 }
 function saveLocal(){ try{ localStorage.setItem('koutei_state', JSON.stringify(collectState())); }catch(e){} }
@@ -882,6 +962,7 @@ document.getElementById('file_import').onchange=e=>{
 
 /* 初期化（共有リンク → 端末の自動保存 → 空 の順で復元） */
 setPaper();
+applyModeVisibility();
 (function init(){
   try{
     if(location.hash.indexOf('#d=')===0){ applyState(JSON.parse(b64decode(location.hash.slice(3)))); return; }
