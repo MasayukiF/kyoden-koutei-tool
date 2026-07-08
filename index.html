@@ -794,9 +794,11 @@ document.querySelectorAll('input[name=paper]').forEach(r=>r.onchange=()=>{ setPa
 document.querySelectorAll('input[name=progmode]').forEach(r=>r.onchange=()=>{ renderSheet(); saveLocal(); });
 /* ====================== モード切替（月間／時間軸） ====================== */
 function applyModeVisibility(){
+  /* .hour-only は初期非表示のCSS(display:none)を持つため、
+     表示させる時は空文字(revert)ではなく明示的に'block'を入れて上書きする */
   const hourMode = state.mode==='hour';
   document.querySelectorAll('.month-only').forEach(el=>el.style.display = hourMode? 'none' : '');
-  document.querySelectorAll('.hour-only').forEach(el=>el.style.display = hourMode? '' : 'none');
+  document.querySelectorAll('.hour-only').forEach(el=>el.style.display = hourMode? 'block' : 'none');
 }
 document.querySelectorAll('input[name=mode]').forEach(r=>r.onchange=()=>{
   state.mode=document.querySelector('input[name=mode]:checked').value;
