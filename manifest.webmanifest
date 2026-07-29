@@ -1,7 +1,7 @@
 {
-  "name": "工事月間工程表ツール（協電機工）",
+  "name": "工事工程表ツール（協電機工）",
   "short_name": "工程表",
-  "description": "工事の月間工程表をブラウザだけで作って印刷できるツール。",
+  "description": "工事の工程表（月間・1日時間軸）をブラウザだけで作って印刷できるツール。",
   "start_url": "./",
   "scope": "./",
   "display": "minimal-ui",
@@ -11,10 +11,28 @@
   "lang": "ja",
   "icons": [
     {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
       "src": "icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }
