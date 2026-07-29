@@ -292,9 +292,9 @@
 
   <!-- ⑤ 進捗率・備考・操作 -->
   <div class="panel no-print">
-    <h2>⑤ 進捗率・備考・印刷</h2>
+    <h2 id="h2_prog">⑤ 進捗率・備考・印刷</h2>
     <div class="body">
-      <div class="grid">
+      <div class="grid" id="viewmode_month_prog">
         <div class="fld"><label>進捗の計算方法</label>
           <div style="display:flex;gap:14px;align-items:center;font-size:13px;padding-top:4px">
             <label><input type="radio" name="progmode" value="days" checked> 日数ベース</label>
@@ -756,6 +756,14 @@ function planRatioRow(rowId, base){
   return total>0 ? Math.min(1,Math.max(0,done/total)) : 0;
 }
 function renderProg(){
+  // 1日・時間軸モードでは進捗率を出さない。
+  // 1日で終わる工事に「日数ベースで61.5%」と出しても意味が無く、
+  // 月間モードの入力が残っていると印刷物に誤った数字が載ってしまうため（社長判断）。
+  const vm=(document.querySelector('input[name=viewmode]:checked')||{}).value||'month';
+  if(vm==='hour'){
+    document.getElementById('o_prog').innerHTML='';
+    return;
+  }
   const ts=val('p_ts'), te=val('p_te');
   const mode=(document.querySelector('input[name=progmode]:checked')||{}).value||'days';
   const base=val('d_base')||val('p_created')||fmtD(new Date());
@@ -853,6 +861,9 @@ function updateViewModeUI(){
   document.getElementById('viewmode_hour_bar').style.display = v==='hour' ? '' : 'none';
   document.getElementById('viewmode_month_events').style.display = v==='month' ? '' : 'none';
   document.getElementById('legend_daycolor').style.display = v==='month' ? '' : 'none';
+  // 1日・時間軸モードでは進捗率を使わない（1日工事に日数ベースの%は意味が無いため）
+  document.getElementById('viewmode_month_prog').style.display = v==='month' ? '' : 'none';
+  document.getElementById('h2_prog').textContent = v==='hour' ? '⑤ 備考・印刷' : '⑤ 進捗率・備考・印刷';
   document.getElementById('h2_period').textContent = v==='hour' ? '② 表示期間（時間軸）' : '② 表示期間（カレンダー軸）';
   document.getElementById('h2_bar').textContent = v==='hour' ? '④ 作業バー（時間軸・予定／実施）' : '④ 作業バー（予定／実施）';
 }
