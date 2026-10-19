@@ -242,7 +242,7 @@
         <thead><tr><th style="width:60px">種別</th><th>名称</th><th style="width:110px">担当</th><th style="width:90px">出来高%</th><th style="width:120px">並べ替え／削除</th></tr></thead>
         <tbody></tbody>
       </table>
-      <p class="hint">◎ヘッダは「空調設備工事」などの大分類見出し。【エリア】は「3階」「屋上」など階でのグループ分け。単独項目は【電気室】のようにエリア直下に細目を作らず1行だけでバーを引きたいときに使います。作業はその下にぶら下がる細目です。各行の <b>↑↓で並べ替え</b>、<b>✎で名称変更</b>ができます（削除しなくてOK）。<br><b>担当</b>は協力会社名（例：ケイズプラン）。<b>出来高%</b>は「出来高ベース進捗」を使うとき各作業の重み（合計100が目安）。空欄なら無視されます。</p>
+      <p class="hint">◎ヘッダは「空調設備工事」などの大分類見出し。【エリア】は「3階」「屋上」など階でのグループ分け。単独項目は【電気室】のようにエリア直下に細目を作らず1行だけでバーを引きたいときに使います。作業はその下にぶら下がる細目です。各行の <b>↑↓で並べ替え</b>、<b>✎で名称変更</b>ができます（削除しなくてOK）。<br><b>担当</b>は協力会社名（例：○○電設）。<b>出来高%</b>は「出来高ベース進捗」を使うとき各作業の重み（合計100が目安）。空欄なら無視されます。</p>
     </div>
   </div>
 
@@ -314,7 +314,7 @@
         <label style="font-size:13px"><input type="radio" name="paper" value="A4"> A4横</label>
         <button class="primary" id="btn_print">🖨 印刷 / PDFで保存</button>
         <button class="mini" id="btn_sample">機械サンプルを入れて試す</button>
-        <button class="mini" id="btn_sample_elec">電気サンプル（熊本高専例）を入れて試す</button>
+        <button class="mini" id="btn_sample_elec">電気サンプル（学校の例）を入れて試す</button>
         <button class="mini" id="btn_sample_hour">1日工程サンプル（空調入替）を入れて試す</button>
         <button class="mini danger" id="btn_clear">全部クリア</button>
       </div>
@@ -398,7 +398,7 @@ const MASTER=[
   {kind:'task',name:'停電切替工事'},
   {kind:'task',name:'試験調整'},
 ];
-/* 電気設備工事：実物（下田さん作成・熊本高専の月間工程表）から起こした作業マスタ。
+/* 電気設備工事：実物（現場の実物の月間工程表）から起こした作業マスタ。
    現場ごとに階数が違うため、エリアと作業セットは個別ボタンで組み合わせる方式にしている。 */
 const ELECTRIC_FLOOR_TASKS=['配線作業','照明器具付','配線器具付','弱電器具付','盤取付','盤結線','試験調整'];
 const ELECTRIC_ROOF_TASKS=['配管作業','配線作業','盤設置'];
@@ -471,7 +471,7 @@ function renderRows(){
     const tr=document.createElement('tr');
     tr.innerHTML=`<td>${KIND_LABEL[r.kind]||r.kind}</td>
       <td>${r.name}</td>
-      <td>${hasBar(r)?`<input type="text" value="${(r.tanto||'').replace(/"/g,'&quot;')}" data-tanto="${r.id}" style="width:100%" placeholder="例）ケイズプラン">`:''}</td>
+      <td>${hasBar(r)?`<input type="text" value="${(r.tanto||'').replace(/"/g,'&quot;')}" data-tanto="${r.id}" style="width:100%" placeholder="例）○○電設">`:''}</td>
       <td>${hasBar(r)?`<input type="number" min="0" step="0.1" value="${r.weight!=null?r.weight:''}" data-weight="${r.id}" style="width:72px" placeholder="—">`:''}</td>
       <td class="row-actions">
         <button class="mini" data-up="${r.id}">↑</button>
@@ -794,7 +794,7 @@ function renderRemarks(){
 
 /* ====================== ページタイトル（＝PDFのファイル名） ====================== */
 /* PDF保存・印刷のとき、ブラウザはページのタイトルをそのままファイル名に使う。
-   工事名を入れて「どの工事のどの月か」がファイル名で分かるようにする（下田さん要望）。 */
+   工事名を入れて「どの工事のどの月か」がファイル名で分かるようにする（現場からの要望）。 */
 function sheetTermForTitle(){
   const vm=(document.querySelector('input[name=viewmode]:checked')||{}).value||'month';
   if(vm==='hour'){
@@ -1041,18 +1041,18 @@ document.getElementById('btn_sample').onclick=()=>{
   refresh();
 };
 
-/* 電気サンプル（下田さん作成・熊本高専の実物月間工程表を再現） */
+/* 電気サンプル（実物の月間工程表を再現・社名は架空） */
 document.getElementById('btn_sample_elec').onclick=()=>{
   const hasData = state.rows.length || state.bars.length || val('p_name') || val('d_start');
   if(hasData && !confirm('今の入力を電気サンプルで上書きします。よろしいですか？')) return;
   state.rows=[]; state.bars=[];
   const monthR=document.querySelector('input[name=viewmode][value="month"]');
   if(monthR){ monthR.checked=true; updateViewModeUI(); }
-  document.getElementById('p_name').value='熊本高専 電気設備工事';
+  document.getElementById('p_name').value='○○高校 電気設備工事';
   document.getElementById('p_owner').value='';
   document.getElementById('p_sv').value='';
   document.getElementById('p_corp').value='協電機工株式会社';
-  document.getElementById('p_agent').value='下田';
+  document.getElementById('p_agent').value='山田 太郎';
   document.getElementById('p_eng').value='';
   document.getElementById('p_ts').value='';
   document.getElementById('p_te').value='';
@@ -1068,38 +1068,38 @@ document.getElementById('btn_sample_elec').onclick=()=>{
   const addTask=(name,tanto)=>{ const r=addRow('task',name); if(tanto) r.tanto=tanto; return r; };
   const bar=(row,s,e,label)=>{ if(row) state.bars.push({id:++BID,rowId:row.id,label:label||'',start:s,end:e,type:'plan'}); };
   addRow('area','3階');
-  bar(addTask('配線作業','ケイズプラン'),'2023-03-29','2023-04-01');
-  bar(addTask('照明器具付','ケイズプラン'),'2023-03-29','2023-04-01');
+  bar(addTask('配線作業','A電設'),'2023-03-29','2023-04-01');
+  bar(addTask('照明器具付','A電設'),'2023-03-29','2023-04-01');
   bar(addTask('配線器具付',''),'2023-04-03','2023-04-08');
-  bar(addTask('弱電器具付','東亜機器'),'2023-04-03','2023-04-08');
-  bar(addTask('盤取付','ケイズプラン'),'2023-04-24','2023-04-28');
-  bar(addTask('盤結線','ケイズプラン'),'2023-05-01','2023-05-12');
+  bar(addTask('弱電器具付','B通信'),'2023-04-03','2023-04-08');
+  bar(addTask('盤取付','A電設'),'2023-04-24','2023-04-28');
+  bar(addTask('盤結線','A電設'),'2023-05-01','2023-05-12');
   bar(addTask('試験調整',''),'2023-05-20','2023-05-30');
   addRow('area','2階');
-  bar(addTask('配線作業','ケイズプラン'),'2023-03-29','2023-04-07');
-  bar(addTask('照明器具付','ケイズプラン'),'2023-03-29','2023-04-07');
-  bar(addTask('配線器具付','ケイズプラン'),'2023-04-10','2023-04-15');
-  bar(addTask('弱電器具付','東亜機器'),'2023-04-03','2023-04-08');
-  bar(addTask('盤取付','ケイズプラン'),'2023-04-24','2023-04-28');
-  bar(addTask('盤結線','ケイズプラン'),'2023-05-01','2023-05-12');
+  bar(addTask('配線作業','A電設'),'2023-03-29','2023-04-07');
+  bar(addTask('照明器具付','A電設'),'2023-03-29','2023-04-07');
+  bar(addTask('配線器具付','A電設'),'2023-04-10','2023-04-15');
+  bar(addTask('弱電器具付','B通信'),'2023-04-03','2023-04-08');
+  bar(addTask('盤取付','A電設'),'2023-04-24','2023-04-28');
+  bar(addTask('盤結線','A電設'),'2023-05-01','2023-05-12');
   bar(addTask('試験調整',''),'2023-05-20','2023-05-30');
   addRow('area','1階');
-  bar(addTask('配線作業','九州インフォ'),'2023-03-29','2023-04-08');
-  bar(addTask('照明器具付','九州インフォ'),'2023-03-29','2023-04-08');
-  bar(addTask('配線器具付','九州インフォ'),'2023-04-10','2023-04-15');
-  bar(addTask('弱電器具付','東亜機器'),'2023-04-03','2023-04-15');
-  bar(addTask('盤取付','ケイズプラン'),'2023-04-24','2023-04-28');
-  bar(addTask('盤結線','ケイズプラン'),'2023-05-01','2023-05-12');
+  bar(addTask('配線作業','C電工'),'2023-03-29','2023-04-08');
+  bar(addTask('照明器具付','C電工'),'2023-03-29','2023-04-08');
+  bar(addTask('配線器具付','C電工'),'2023-04-10','2023-04-15');
+  bar(addTask('弱電器具付','B通信'),'2023-04-03','2023-04-15');
+  bar(addTask('盤取付','A電設'),'2023-04-24','2023-04-28');
+  bar(addTask('盤結線','A電設'),'2023-05-01','2023-05-12');
   bar(addTask('試験調整',''),'2023-05-20','2023-05-30');
   addRow('area','屋上');
   bar(addTask('配管作業',''),'2023-05-20','2023-05-30');
   bar(addTask('配線作業',''),'2023-05-20','2023-05-30');
   bar(addTask('盤設置',''),'2023-04-25','2023-04-30');
   addRow('area','屋外');
-  bar(addTask('発電機設置','日向風'),'2023-04-30','2023-05-10');
+  bar(addTask('発電機設置','D発電機'),'2023-04-30','2023-05-10');
   bar(addTask('配管作業',''),'2023-05-11','2023-05-13');
   bar(addTask('配線作業',''),'2023-05-13','2023-05-15');
-  bar(addTask('試運転調整','旭電業'),'2023-05-25','2023-05-30');
+  bar(addTask('試運転調整','E電業'),'2023-05-25','2023-05-30');
   bar(addTask('幹線配線',''),'2023-04-17','2023-04-29');
   bar(addTask('ダクト設置',''),'2023-04-10','2023-04-15');
   bar(addRow('solo','電気室'),'2023-05-25','2023-05-30','日程確認');
@@ -1111,7 +1111,7 @@ document.getElementById('btn_sample_hour').onclick=()=>{
   const hasData = state.rows.length || hstate.blocks.length || val('p_name');
   if(hasData && !confirm('今の入力を1日工程サンプルで上書きします。よろしいですか？')) return;
   state.rows=[]; state.bars=[]; hstate.blocks=[]; hstate.bars=[];
-  document.getElementById('p_name').value='ミスドA店 空調入替工事';
+  document.getElementById('p_name').value='○○店 空調入替工事';
   document.getElementById('p_owner').value='';
   document.getElementById('p_sv').value='';
   document.getElementById('p_corp').value='協電機工株式会社';
