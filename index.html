@@ -312,15 +312,16 @@
         <label style="font-size:12px">用紙：</label>
         <label style="font-size:13px"><input type="radio" name="paper" value="A3" checked> A3横</label>
         <label style="font-size:13px"><input type="radio" name="paper" value="A4"> A4横</label>
-        <button class="primary" id="btn_print">🖨 印刷 / PDFで保存</button>
+        <button class="primary" id="btn_pdf">📄 PDFで保存</button>
+        <button id="btn_print">🖨 印刷</button>
         <button class="mini" id="btn_sample">機械サンプルを入れて試す</button>
         <button class="mini" id="btn_sample_elec">電気サンプル（学校の例）を入れて試す</button>
         <button class="mini" id="btn_sample_hour">1日工程サンプル（空調入替）を入れて試す</button>
         <button class="mini danger" id="btn_clear">全部クリア</button>
       </div>
       <p class="hint">
-        <b>PDFにするには：</b>「印刷 / PDFで保存」→ <b>PC</b>＝送信先で「PDFに保存」を選ぶ。<b>iPhone/iPad</b>＝印刷画面から共有→「プリント」または「PDFを保存」。<br>
-        ※iPhoneでボタンが効かない時は、ホーム画面のアイコンではなく <b>Safariでページを開いて</b>からどうぞ（全画面アプリだと印刷できないため）。<br>
+        <b>PDFにするには：</b>「📄 PDFで保存」を押すだけ。iPhone・スマホは共有画面が出るので「"ファイル"に保存」やChatworkに送れます。PCはそのままダウンロードされます。<br>
+        紙に印刷したいときは「🖨 印刷」。<br>
         予定進捗率＝（基準日−工期開始＋1）÷（工期終了−工期開始＋1）。基準日が空なら作成日→今日の順。
       </p>
     </div>
@@ -818,6 +819,120 @@ function updateDocTitle(){
   document.title = (name+'_工程表'+(term?'_'+term:'')).replace(/[\\\/:*?"<>|]/g,'_');
 }
 
+
+/* ====================== PDFを自前で作る（iPhone対策） ======================
+   iPhoneは「印刷→PDF」が動かないことがある（下田さん。工事写真アプリと同じ症状）。
+   そこで画面の工程表を絵(canvas)にそのまま描き写し、JPEGにしてPDFに包む。
+   ブラウザの印刷機能を通さないので確実に出る。作りは工事写真アプリ（改善/005）の pdfFromJpegs と同じ。外部ライブラリなし。 */
+function pdfFromJpegs(pages){ // pages:[{u8,w,h,pw,ph}]
+  const enc=new TextEncoder(); const parts=[]; let len=0; const offs=[];
+  const put=x=>{ const b=(typeof x==='string')?enc.encode(x):x; parts.push(b); len+=b.length; };
+  const obj=(n,body)=>{ offs[n]=len; put(n+' 0 obj\n'); body(); put('\nendobj\n'); };
+  put('%PDF-1.4\n%âãÏÓ\n');
+  const N=pages.length;
+  obj(1,()=>put('<< /Type /Catalog /Pages 2 0 R >>'));
+  obj(2,()=>put('<< /Type /Pages /Count '+N+' /Kids ['+pages.map((_,i)=>(3+i*3)+' 0 R').join(' ')+'] >>'));
+  pages.forEach((pg,i)=>{
+    const P=3+i*3, C=4+i*3, I=5+i*3;
+    const pw=pg.pw.toFixed(2), ph=pg.ph.toFixed(2);
+    obj(P,()=>put('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+pw+' '+ph+'] /Resources << /XObject << /Im0 '+I+' 0 R >> >> /Contents '+C+' 0 R >>'));
+    const cs='q '+pw+' 0 0 '+ph+' 0 0 cm /Im0 Do Q';
+    obj(C,()=>{ put('<< /Length '+cs.length+' >>\nstream\n'); put(cs); put('\nendstream'); });
+    obj(I,()=>{ put('<< /Type /XObject /Subtype /Image /Width '+pg.w+' /Height '+pg.h+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+pg.u8.length+' >>\nstream\n'); put(pg.u8); put('\nendstream'); });
+  });
+  const xref=len; const total=3+N*3;
+  let x='xref\n0 '+total+'\n0000000000 65535 f \n';
+  for(let n=1;n<total;n++) x+=String(offs[n]).padStart(10,'0')+' 00000 n \n';
+  put(x); put('trailer\n<< /Size '+total+' /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n');
+  return new Blob(parts,{type:'application/pdf'});
+}
+function dataURLtoU8(d){ const b=atob(d.split(',')[1]); const u=new Uint8Array(b.length); for(let i=0;i<b.length;i++) u[i]=b.charCodeAt(i); return u; }
+/* 画面に出ている工程表(#sheet)を、見た目どおりcanvasに描き写す。
+   背景→線(バー)→文字の順に描く。月間・1日のどちらのモードでも、画面の表をそのまま写すので同じ処理で済む。 */
+function paintSheet(ctx,sheet,ox,oy,k){
+  const base=sheet.getBoundingClientRect();
+  const bx=base.left+sheet.clientLeft, by=base.top+sheet.clientTop;
+  const X=x=>ox+(x-bx)*k, Y=y=>oy+(y-by)*k;
+  const clear=c=>!c||c==='transparent'||/rgba\(.*,\s*0\)$/.test(c);
+  const fill=(c,x,y,w,h)=>{ ctx.fillStyle=c; ctx.fillRect(X(x),Y(y),w*k,h*k); };
+  const els=[...sheet.querySelectorAll('*')].map(el=>({el,r:el.getBoundingClientRect(),cs:getComputedStyle(el)})).filter(o=>o.r.width>0&&o.r.height>0&&o.cs.visibility!=='hidden');
+  const box=({r,cs})=>{
+    if(!clear(cs.backgroundColor)) fill(cs.backgroundColor,r.left,r.top,r.width,r.height);
+    const side=(n,x,y,w,h)=>{ const bw=parseFloat(cs['border'+n+'Width'])||0; if(bw&&cs['border'+n+'Style']!=='none'&&!clear(cs['border'+n+'Color'])) fill(cs['border'+n+'Color'],x(bw),y(bw),w(bw),h(bw)); };
+    side('Top',  ()=>r.left, ()=>r.top,             ()=>r.width, b=>b);
+    side('Bottom',()=>r.left, b=>r.bottom-b,         ()=>r.width, b=>b);
+    side('Left', ()=>r.left, ()=>r.top,             b=>b, ()=>r.height);
+    side('Right',b=>r.right-b, ()=>r.top,           b=>b, ()=>r.height);
+  };
+  els.filter(o=>o.cs.position!=='absolute').forEach(box);   // 表の背景・罫線
+  els.filter(o=>o.cs.position==='absolute').forEach(box);   // 予定・実施のバー
+  const clipOf=el=>{ for(let a=el;a&&a!==sheet;a=a.parentElement){ if(getComputedStyle(a).overflow!=='visible') return a.getBoundingClientRect(); } return null; };
+  const setFont=cs=>{ ctx.font=cs.fontStyle+' '+cs.fontWeight+' '+(parseFloat(cs.fontSize)*k)+'px '+cs.fontFamily; ctx.fillStyle=cs.color; };
+  ctx.textBaseline='middle'; ctx.textAlign='left';
+  const rng=document.createRange();
+  const withClip=(el,fn)=>{ const c=clipOf(el); ctx.save(); if(c){ ctx.beginPath(); ctx.rect(X(c.left),Y(c.top),c.width*k,c.height*k); ctx.clip(); } fn(); ctx.restore(); };
+  // 文字は1文字ずつ実際の位置に描く（字間・折り返しもそのまま再現できる）
+  const tw=document.createTreeWalker(sheet,NodeFilter.SHOW_TEXT); let n;
+  while((n=tw.nextNode())){
+    const s=n.nodeValue; if(!s.trim()) continue;
+    const el=n.parentElement, cs=getComputedStyle(el); if(cs.visibility==='hidden') continue;
+    withClip(el,()=>{ setFont(cs);
+      for(let i=0;i<s.length;){ const cl=s.codePointAt(i)>0xffff?2:1; const ch=s.slice(i,i+cl);
+        if(ch.trim()){ rng.setStart(n,i); rng.setEnd(n,i+cl); const r=rng.getBoundingClientRect(); if(r.width) ctx.fillText(ch,X(r.left),Y(r.top+r.height/2)); }
+        i+=cl; }
+    });
+  }
+  // CSSで付けている記号（◎ヘッダ・【エリア】の括弧）も描く
+  els.forEach(({el})=>{ ['::before','::after'].forEach(p=>{
+    const pc=getComputedStyle(el,p), c=pc.content; if(!c||c==='none'||c==='normal') return;
+    const t=c.replace(/^["']|["']$/g,''); if(!t.trim()) return;
+    rng.selectNodeContents(el); const rs=[...rng.getClientRects()].filter(r=>r.width); if(!rs.length) return;
+    withClip(el,()=>{ setFont(pc); const w=ctx.measureText(t).width;
+      if(p==='::before'){ const r=rs[0]; ctx.fillText(t,X(r.left)-w,Y(r.top+r.height/2)); }
+      else { const r=rs[rs.length-1]; ctx.fillText(t,X(r.right),Y(r.top+r.height/2)); }
+    });
+  }); });
+}
+function dlBlob(blob,name){ const a=document.createElement('a'); const u=URL.createObjectURL(blob); a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),4000); }
+/* スマホは共有画面（ファイルに保存・Chatworkに送る等）、PCはそのままダウンロード */
+function savePdf(blob,name){
+  const ua=navigator.userAgent;
+  const mobile=/iPhone|iPad|iPod|Android/i.test(ua)||(navigator.maxTouchPoints>1&&/Macintosh/.test(ua));
+  try{
+    const file=new File([blob],name,{type:'application/pdf'});
+    if(mobile&&navigator.canShare&&navigator.canShare({files:[file]})){
+      navigator.share({files:[file],title:name}).catch(e=>{ if(!e||e.name!=='AbortError') dlBlob(blob,name); });
+      return;
+    }
+  }catch(e){}
+  dlBlob(blob,name);
+}
+function exportSheetPdf(){
+  const sheet=document.getElementById('sheet');
+  const paper=(document.querySelector('input[name=paper]:checked')||{}).value||'A3';
+  const PWmm=paper==='A4'?297:420, PHmm=paper==='A4'?210:297;   // 横向き
+  const MM=200/25.4, margin=8*MM;                                // 200dpi
+  const keep={w:sheet.style.width,mw:sheet.style.maxWidth,o:sheet.style.overflow};
+  let blob;
+  try{
+    renderSheet();
+    // スマホの狭い画面でも、用紙の幅で組み直してから写す
+    const pad=sheet.offsetWidth-sheet.clientWidth+24;
+    sheet.style.maxWidth='none'; sheet.style.overflow='visible'; sheet.style.width=(PAGEPX[paper]+pad)+'px';
+    const tw=Math.max(0,...[...sheet.querySelectorAll('table')].map(t=>t.offsetWidth));
+    if(tw+pad>sheet.offsetWidth) sheet.style.width=(tw+pad)+'px';
+    const cw=sheet.clientWidth, ch=sheet.clientHeight;
+    const W=Math.round(PWmm*MM), H=Math.round(PHmm*MM);
+    const k=Math.min((W-2*margin)/cw,(H-2*margin)/ch);
+    const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+    const ctx=cv.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+    paintSheet(ctx,sheet,(W-cw*k)/2,margin,k);
+    blob=pdfFromJpegs([{u8:dataURLtoU8(cv.toDataURL('image/jpeg',0.92)),w:W,h:H,pw:PWmm*72/25.4,ph:PHmm*72/25.4}]);
+  }catch(e){ alert('PDFの作成に失敗しました：'+e.message); console.error(e); }
+  finally{ sheet.style.width=keep.w; sheet.style.maxWidth=keep.mw; sheet.style.overflow=keep.o; }
+  if(blob) savePdf(blob,(document.title||'工程表')+'.pdf');
+}
+
 /* ====================== イベント ====================== */
 document.getElementById('btn_master_all').onclick=()=>{ MASTER.forEach(m=>addRow(m.kind,m.name)); refresh(); };
 document.querySelectorAll('[data-master]').forEach(btn=>btn.onclick=()=>{
@@ -969,6 +1084,7 @@ function setPaper(){
   st.textContent=`@page{ size:${size} landscape; margin:8mm; }`;
 }
 document.getElementById('btn_print').onclick=()=>{ setPaper(); window.print(); };
+document.getElementById('btn_pdf').onclick=exportSheetPdf;
 document.getElementById('btn_clear').onclick=()=>{
   if(!confirm('入力を全部消します。よろしいですか？')) return;
   state.rows=[]; state.bars=[]; state.events=[]; hstate.blocks=[]; hstate.bars=[];
